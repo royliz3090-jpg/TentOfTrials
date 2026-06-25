@@ -600,6 +600,75 @@ def print_summary(results: list[tuple[str, bool, float, str, Optional[str]]]):
           f"{color(str(failed) + ' failed', Colors.RED)}, "
           f"{total_time:.1f}s total")
 
+# ---------------------------------------------------------------------------
+# MODULE VALIDATION HELPERS
+# ---------------------------------------------------------------------------
+
+def parse_module_selection(module_str: str) -> list[str]:
+    """Parse comma-separated module names with optional spaces.
+    
+    Args:
+        module_str: Comma-separated module names (e.g., "backend, frontend")
+    
+    Returns:
+        List of stripped module names
+    
+    Examples:
+        >>> parse_module_selection("backend")
+        ['backend']
+        >>> parse_module_selection("backend, frontend , market")
+        ['backend', 'frontend', 'market']
+        >>> parse_module_selection("all")
+        ['all']
+    """
+    if not module_str or module_str.strip() == "all":
+        return ["all"]
+    return [n.strip() for n in module_str.split(",") if n.strip()]
+
+
+def validate_module_names(names: list[str], available_modules: list['Module']) -> tuple[list['Module'], list[str]]:
+    """Validate module names against available modules.
+    
+    Args:
+        names: List of module names to validate
+        available_modules: List of available Module objects
+    
+    Returns:
+        Tuple of (valid_modules, invalid_names)
+    """
+    valid = []
+    invalid = []
+    available_names = {m.name for m in available_modules}
+    
+    for name in names:
+        if name == "all":
+            return available_modules, []
+        found = [m for m in available_modules if m.name == name]
+        if found:
+            valid.extend(found)
+        else:
+            invalid.append(name)
+    
+    return valid, invalid
+
+
+def list_modules(available_modules: list['Module']) -> None:
+    """Print available modules with details.
+    
+    Args:
+        available_modules: List of Module objects to display
+    """
+    print(f"  {color('Available modules:', Colors.BOLD)}")
+    for m in available_modules:
+        print(f"    {color(m.name, Colors.CYAN)} ({m.language})")
+        print(f"      dir: {m.dir.relative_to(ROOT)}")
+        print(f"      build: {' '.join(m.build_cmd)}")
+        if m.clean_cmd:
+            print(f"      clean: {' '.join(m.clean_cmd)}")
+        if m.build_dir:
+            print(f"      output: {m.build_dir.relative_to(ROOT)}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Tent of Trials  -  Multi-Language Build System",
@@ -646,11 +715,7 @@ Diagnostic bundle:
     print()
 
     if args.list:
-        print(f"  {color('Available modules:', Colors.BOLD)}")
-        for m in MODULES:
-            print(f"    {color(m.name, Colors.CYAN)} ({m.language})")
-            print(f"      dir: {m.dir.relative_to(ROOT)}")
-            print(f"      build: {' '.join(m.build_cmd)}")
+        list_modules(MODULES)
         return 0
 
     print(f"  {color('Checking prerequisites...', Colors.GRAY)}")
@@ -666,9 +731,8 @@ Diagnostic bundle:
     if args.module == "all":
         selected = MODULES
     else:
-        names = [n.strip() for n in args.module.split(",")]
-        selected = [m for m in MODULES if m.name in names]
-        not_found = set(names) - {m.name for m in MODULES}
+        names = parse_module_selection(args.module)
+        selected, not_found = validate_module_names(names, MODULES)
         if not_found:
             print(f"  {color('✗ Unknown modules:', Colors.RED)} {', '.join(not_found)}")
             print(f"    Available: {', '.join(m.name for m in MODULES)}")
